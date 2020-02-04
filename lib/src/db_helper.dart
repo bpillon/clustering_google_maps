@@ -1,5 +1,5 @@
 import 'package:clustering_google_maps/src/aggregated_points.dart';
-import 'package:clustering_google_maps/src/lat_lang_geohash.dart';
+import 'package:clustering_google_maps/src/cluster_item.dart';
 import 'package:google_maps_flutter/google_maps_flutter.dart' show LatLngBounds;
 import 'package:meta/meta.dart';
 import 'package:sqflite/sqflite.dart';
@@ -51,7 +51,7 @@ class DBHelper {
           print(item);
           return true;
         }());
-        var p = new AggregatedPoints.fromMap(item, dbLatColumn, dbLongColumn);
+        var p = AggregatedPoints.fromMap(item, dbLatColumn, dbLongColumn);
         aggregatedPoints.add(p);
       }
       assert(() {
@@ -69,7 +69,7 @@ class DBHelper {
     }
   }
 
-  static Future<List<LatLngAndGeohash>> getPoints(
+  static Future<List<ClusterItem>> getPoints(
       {@required Database database,
       @required String dbTable,
       @required String dbLatColumn,
@@ -79,9 +79,9 @@ class DBHelper {
       var result = await database
           .rawQuery('SELECT $dbLatColumn as lat, $dbLongColumn as long '
               'FROM $dbTable $whereClause;');
-      List<LatLngAndGeohash> points = new List();
+      List<ClusterItem> points = new List();
       for (Map<String, dynamic> item in result) {
-        var p = new LatLngAndGeohash.fromMap(item);
+        var p = ClusterItem.fromMap(item);
         points.add(p);
       }
       assert(() {
@@ -95,7 +95,7 @@ class DBHelper {
         print(e.toString());
         return true;
       }());
-      return List<LatLngAndGeohash>();
+      return List<ClusterItem>();
     }
   }
 

@@ -7,15 +7,15 @@ import 'package:google_maps_flutter/google_maps_flutter.dart';
 import 'package:sqflite/sqflite.dart';
 
 class SplashBloc {
-  Future<List<LatLngAndGeohash>> getListOfLatLngAndGeohash(
+  Future<List<ClusterItem>> getListOfLatLngAndGeohash(
       BuildContext context) async {
     print("START GET FAKE DATA");
     try {
       final fakeList = await loadDataFromJson(context);
-      List<LatLngAndGeohash> myPoints = List();
+      List<ClusterItem> myPoints = List();
       for (int i = 0; i < fakeList.length; i++) {
         final fakePoint = fakeList[i];
-        final p = LatLngAndGeohash(
+        final p = ClusterItem(
           LatLng(fakePoint["LATITUDE"], fakePoint["LONGITUDE"]),
         );
         myPoints.add(p);

@@ -4,14 +4,16 @@ import 'dart:ui' as ui;
 import 'package:clustering_google_maps/src/aggregated_points.dart';
 import 'package:clustering_google_maps/src/aggregation_setup.dart';
 import 'package:clustering_google_maps/src/db_helper.dart';
-import 'package:clustering_google_maps/src/lat_lang_geohash.dart';
+import 'package:clustering_google_maps/src/cluster_item.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/painting.dart';
 import 'package:google_maps_flutter/google_maps_flutter.dart';
 import 'package:meta/meta.dart';
 import 'package:sqflite/sqflite.dart';
 
-class ClusteringHelper {
+import 'aggregated_points.dart';
+
+class ClusteringHelper<T> {
   ClusteringHelper.forDB({
     @required this.dbTable,
     @required this.dbLatColumn,
@@ -21,6 +23,7 @@ class ClusteringHelper {
     this.database,
     this.whereClause = "",
     @required this.aggregationSetup,
+    @required this.markerBuilder,
     this.maxZoomForAggregatePoints = 13.5,
     this.bitmapAssetPathForSingleMarker,
   })  : assert(dbTable != null),
@@ -34,6 +37,7 @@ class ClusteringHelper {
     @required this.updateMarkers,
     this.maxZoomForAggregatePoints = 13.5,
     @required this.aggregationSetup,
+    @required this.markerBuilder,
     this.bitmapAssetPathForSingleMarker,
   })  : assert(list != null),
         assert(aggregationSetup != null);
@@ -62,6 +66,9 @@ class ClusteringHelper {
   //Custom bitmap: string of assets position
   final AggregationSetup aggregationSetup;
 
+  // Method to build markers
+  final Future<Marker> Function(AggregatedPoints<T>) markerBuilder;
+
   //Where clause for query db
   String whereClause;
 
@@ -78,7 +85,7 @@ class ClusteringHelper {
   Function updateMarkers;
 
   //List of points for memory clustering
-  List<LatLngAndGeohash> list;
+  List<ClusterItem<T>> list;
 
   //Call during the editing of CameraPosition
   //If you want updateMap during the zoom in/out set forceUpdate to true
@@ -109,12 +116,12 @@ class ClusteringHelper {
 
   // Used for update list
   // NOT RECCOMENDED for good performance (SQL IS BETTER)
-  updateData(List<LatLngAndGeohash> newList) {
+  updateData(List<ClusterItem<T>> newList) {
     list = newList;
     updateMap();
   }
 
-  Future<List<AggregatedPoints>> getAggregatedPoints(double zoom) async {
+  Future<List<AggregatedPoints<T>>> getAggregatedPoints(double zoom) async {
     assert(() {
       print("loading aggregation");
       return true;
@@ -139,7 +146,7 @@ class ClusteringHelper {
     }
 
     try {
-      List<AggregatedPoints> aggregatedPoints;
+      List<AggregatedPoints<T>> aggregatedPoints;
       final latLngBounds = await mapController.getVisibleRegion();
       if (database != null) {
         aggregatedPoints = await DBHelper.getAggregatedPoints(
@@ -180,15 +187,15 @@ class ClusteringHelper {
         print(e.toString());
         return true;
       }());
-      return List<AggregatedPoints>();
+      return List<AggregatedPoints<T>>();
     }
   }
 
-  final List<AggregatedPoints> aggList = [];
+  final List<AggregatedPoints<T>> aggList = [];
 
-  List<AggregatedPoints> _retrieveAggregatedPoints(
-      List<LatLngAndGeohash> inputList,
-      List<AggregatedPoints> resultList,
+  List<AggregatedPoints<T>> _retrieveAggregatedPoints(
+      List<ClusterItem<T>> inputList,
+      List<AggregatedPoints<T>> resultList,
       int level) {
     assert(() {
       print("input list lenght: " + inputList.length.toString());
@@ -198,8 +205,8 @@ class ClusteringHelper {
     if (inputList.isEmpty) {
       return resultList;
     }
-    final List<LatLngAndGeohash> newInputList = List.from(inputList);
-    List<LatLngAndGeohash> tmp;
+    final List<ClusterItem<T>> newInputList = List.from(inputList);
+    List<ClusterItem<T>> tmp;
     final t = newInputList[0].geohash.substring(0, level);
     tmp =
         newInputList.where((p) => p.geohash.substring(0, level) == t).toList();
@@ -211,21 +218,22 @@ class ClusteringHelper {
       longitude += l.location.longitude;
     });
     final count = tmp.length;
-    final a =
-        AggregatedPoints(LatLng(latitude / count, longitude / count), count);
+    final a = AggregatedPoints<T>(
+        LatLng(latitude / count, longitude / count), count,
+        items: tmp.map((i) => i.item));
     resultList.add(a);
     return _retrieveAggregatedPoints(newInputList, resultList, level);
   }
 
   Future<void> updateAggregatedPoints({double zoom = 0.0}) async {
-    List<AggregatedPoints> aggregation = await getAggregatedPoints(zoom);
+    List<AggregatedPoints<T>> aggregation = await getAggregatedPoints(zoom);
 
     assert(() {
       print("aggregation lenght: " + aggregation.length.toString());
       return true;
     }());
 
-    final Set<Marker> markers = {};
+    final Set<Marker> markers = Set();
 
     for (var i = 0; i < aggregation.length; i++) {
       final a = aggregation[i];
@@ -234,31 +242,7 @@ class ClusteringHelper {
         return true;
       }());
 
-      BitmapDescriptor bitmapDescriptor;
-
-      if (a.count == 1) {
-        if (bitmapAssetPathForSingleMarker != null) {
-          bitmapDescriptor =
-              BitmapDescriptor.fromAsset(bitmapAssetPathForSingleMarker);
-        } else {
-          bitmapDescriptor = BitmapDescriptor.defaultMarker;
-        }
-      } else {
-        // >1
-        final Uint8List markerIcon =
-            await getBytesFromCanvas(a.count.toString(), getColor(a.count));
-        bitmapDescriptor = BitmapDescriptor.fromBytes(markerIcon);
-      }
-      final MarkerId markerId = MarkerId(a.getId());
-
-      final marker = Marker(
-        markerId: markerId,
-        position: a.location,
-        infoWindow: InfoWindow(title: a.count.toString()),
-        icon: bitmapDescriptor,
-      );
-
-      markers.add(marker);
+      markers.add(await markerBuilder(a));
     }
     updateMarkers(markers);
   }
@@ -270,7 +254,7 @@ class ClusteringHelper {
     }());
 
     try {
-      List<LatLngAndGeohash> listOfPoints;
+      List<ClusterItem<T>> listOfPoints;
       if (database != null) {
         listOfPoints = await DBHelper.getPoints(
             database: database,

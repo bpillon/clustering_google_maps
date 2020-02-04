@@ -2,10 +2,10 @@ import 'package:example/app_db.dart';
 import 'package:example/fake_point.dart';
 import 'package:flutter/material.dart';
 import 'package:google_maps_flutter/google_maps_flutter.dart';
-import 'package:clustering_google_maps/clustering_google_maps.dart' show LatLngAndGeohash,ClusteringHelper,AggregationSetup;
+import 'package:clustering_google_maps/clustering_google_maps.dart' show ClusterItem,ClusteringHelper,AggregationSetup;
 
 class HomeScreen extends StatefulWidget {
-  final List<LatLngAndGeohash> list;
+  final List<ClusterItem> list;
 
   HomeScreen({Key key, this.list}) : super(key: key);
 
